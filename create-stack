@@ -130,3 +130,4 @@ if [ -z "${project}" ] || [ -z "${module}" ] || [ -z "${region}" ] || [ -z "${gi
 fi
 
 create-update ${project} ${module} ${region} ${githubuser}
+echo "View your Cloudformation Stack at https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks"
