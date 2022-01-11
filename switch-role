@@ -8,7 +8,7 @@ role_name="${2}"
 
 target_profile=data-derp
 
-usage() { echo "Usage: $0 [-p <base profile: string>] [-m <target role: string>]" 1>&2; exit 1; }
+usage() { echo "Usage: $0 [-b <base profile: string>] [-t <target role: string>]" 1>&2; exit 1; }
 
 while getopts ":b:t:" o; do
     case "${o}" in
