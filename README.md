@@ -8,7 +8,7 @@ This Cloudformation template sets up the following:
 * GithubRunner attached to your specified Github repository 
 
 ## Setup
-1. Add this to your **PRIVATE** Github repository as a submodule: `git submodule add git@github.com:data-derp/gitbub-runner-aws-cloudformation.git`
+1. Add this to your **PRIVATE** Github repository as a submodule: `git submodule add git@github.com:data-derp/github-runner-aws-cloudformation.git`
    * This module creates AWS Resources. If added to a public repository, anyone can fork and use the Github Runner and create AWS Resources.
 2. [Create a Github Personal Access Token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token) with the Repo Scope. This will be used to generate a token to register a GithubRunner.
 ![github-repo-scope](./assets/github-repo-scope.png)
