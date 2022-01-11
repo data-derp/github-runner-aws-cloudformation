@@ -7,6 +7,7 @@ script_dir=$(cd "$(dirname "$0")" ; pwd -P)
 source ${script_dir}/fetch-github-registration-token.sh
 
 aws_profile=data-derp
+repo_name=$(fetch-repo-name)
 
 create-update() {
   pushd "${script_dir}" > /dev/null
@@ -76,7 +77,7 @@ create-update-stack() {
         --template-body file://./template.yaml \
         --capabilities CAPABILITY_NAMED_IAM \
         --region "${aws_region}" \
-        --parameters ParameterKey=ProjectName,ParameterValue=${project_name} ParameterKey=ModuleName,ParameterValue=${module_name} ParameterKey=InstanceType,ParameterValue=t3.medium ParameterKey=GithubRepoUrl,ParameterValue=https://github.com/$(fetch-repo-name)
+        --parameters ParameterKey=ProjectName,ParameterValue=${project_name} ParameterKey=ModuleName,ParameterValue=${module_name} ParameterKey=InstanceType,ParameterValue=t3.medium ParameterKey=GithubRepoUrl,ParameterValue=https://github.com/${repo_name}
     else
       echo "Stack (${stack_name}) exists. Creating ChangeSet..."
       now=$(date +%s)
@@ -86,7 +87,7 @@ create-update-stack() {
         --template-body file://./template.yaml \
         --capabilities CAPABILITY_NAMED_IAM \
         --region "${aws_region}" \
-        --parameters ParameterKey=ProjectName,ParameterValue=${project_name} ParameterKey=ModuleName,ParameterValue=${module_name} ParameterKey=InstanceType,ParameterValue=t3.medium ParameterKey=GithubRepoUrl,ParameterValue=https://github.com/$(fetch-repo-name)
+        --parameters ParameterKey=ProjectName,ParameterValue=${project_name} ParameterKey=ModuleName,ParameterValue=${module_name} ParameterKey=InstanceType,ParameterValue=t3.medium ParameterKey=GithubRepoUrl,ParameterValue=https://github.com/${repo_name}
 
       echo "Waiting 20 seconds for the ChangeSet to create..."
       sleep 20
