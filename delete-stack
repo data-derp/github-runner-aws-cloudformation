@@ -4,8 +4,6 @@ set -e
 
 script_dir=$(cd "$(dirname "$0")" ; pwd -P)
 
-aws_profile=data-derp
-
 delete-ssm-parameter() {
     project_name="${1}"
     module_name="${2}"
@@ -18,9 +16,9 @@ delete-ssm-parameter() {
     done
 
     parameter="/${project_name}/${module_name}/github-runner-reg-token"
-    if [[ $(AWS_PROFILE=${aws_profile} aws ssm get-parameter --name "${parameter}" --region "${aws_region}") ]]; then
+    if [[ $(aws ssm get-parameter --name "${parameter}" --region "${aws_region}") ]]; then
       echo "Parameter (${parameter}) exists. Deleting..."
-      AWS_PROFILE=${aws_profile} aws ssm delete-parameter \
+      aws ssm delete-parameter \
         --name "${parameter}" \
         --region "${aws_region}"
     else
@@ -35,16 +33,16 @@ delete-stack() {
 
   pushd "${script_dir}" > /dev/null
     stack_name="${project_name}-${module_name}-github-runner-stack"
-    if [[ $(AWS_PROFILE="${aws_profile}"  aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}") ]]; then
+    if [[ $(aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}") ]]; then
       echo "Stack (${stack_name}) exists. Deleting..."
-      AWS_PROFILE="${aws_profile}" aws cloudformation delete-stack --stack-name "${stack_name}" \
+      aws cloudformation delete-stack --stack-name "${stack_name}" \
         --stack-name "${stack_name}" \
         --region "${aws_region}"
     else
       echo "Stack (${stack_name}) does not exist. Nothing to do here!"
     fi
 
-#    until $(AWS_PROFILE="${aws_profile}" aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}" 2>&1 | grep -q "${stack_name} does not exist")
+#    until $(aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}" 2>&1 | grep -q "${stack_name} does not exist")
 #    do
 #      echo "Deleting..."
 #      sleep 10

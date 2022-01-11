@@ -6,7 +6,6 @@ script_dir=$(cd "$(dirname "$0")" ; pwd -P)
 
 source ${script_dir}/fetch-github-registration-token.sh
 
-aws_profile=data-derp
 repo_name=$(fetch-repo-name)
 
 create-update() {
@@ -47,16 +46,16 @@ create-update-ssm-parameter() {
     done
 
     parameter="/${project_name}/${module_name}/github-runner-reg-token"
-    if [[ ! $(AWS_PROFILE=${aws_profile} aws ssm get-parameter --name "${parameter}" --region ${aws_region}) ]]; then
+    if [[ ! $(aws ssm get-parameter --name "${parameter}" --region ${aws_region}) ]]; then
       echo "Parameter (${parameter}) does not exist. Creating..."
-      AWS_PROFILE=${aws_profile} aws ssm put-parameter \
+      aws ssm put-parameter \
         --name "${parameter}" \
         --value "${token}" \
         --type SecureString \
         --region "${aws_region}"
     else
       echo "Parameter (${parameter}) exists. Updating..."
-      AWS_PROFILE=${aws_profile} aws ssm put-parameter \
+      aws ssm put-parameter \
         --name "${parameter}" \
         --value "${token}" \
         --overwrite \
@@ -71,9 +70,9 @@ create-update-stack() {
 
   pushd "${script_dir}" > /dev/null
     stack_name="${project_name}-${module_name}-github-runner-stack"
-    if [[ ! $(AWS_PROFILE=${aws_profile}  aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}") ]]; then
+    if [[ ! $(aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}") ]]; then
       echo "Stack (${stack_name}) does not exist. Creating..."
-      AWS_PROFILE=${aws_profile} aws cloudformation create-stack --stack-name "${stack_name}" \
+      aws cloudformation create-stack --stack-name "${stack_name}" \
         --template-body file://./template.yaml \
         --capabilities CAPABILITY_NAMED_IAM \
         --region "${aws_region}" \
@@ -81,7 +80,7 @@ create-update-stack() {
     else
       echo "Stack (${stack_name}) exists. Creating ChangeSet..."
       now=$(date +%s)
-      AWS_PROFILE=${aws_profile} aws cloudformation create-change-set \
+      aws cloudformation create-change-set \
         --stack-name "${stack_name}" \
         --change-set-name "update-${now}" \
         --template-body file://./template.yaml \
@@ -92,7 +91,7 @@ create-update-stack() {
       echo "Waiting 20 seconds for the ChangeSet to create..."
       sleep 20
       echo "Executing ChangeSet..."
-      AWS_PROFILE=${aws_profile} aws cloudformation execute-change-set \
+      aws cloudformation execute-change-set \
         --change-set-name "update-${now}" \
         --stack-name "${stack_name}" \
         --region "${aws_region}"
