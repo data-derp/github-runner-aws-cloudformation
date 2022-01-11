@@ -14,12 +14,11 @@ fetch-github-registration-token() {
     exit 1
   fi
 
-  repo_name=get_repo_name
   response=$(curl \
     -u $github_username \
     -X POST \
     -H "Accept: application/vnd.github.v3+json" \
-    https://api.github.com/repos/${repo_name}/actions/runners/registration-token)
+    https://api.github.com/repos/$(fetch-repo-name)/actions/runners/registration-token)
 
   echo $response | jq -r .token
 }
