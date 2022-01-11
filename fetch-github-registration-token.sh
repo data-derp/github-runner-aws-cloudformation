@@ -2,8 +2,8 @@
 
 script_dir=$(cd "$(dirname "$0")" ; pwd -P)
 
-get_repo_name() {
-  $([[ $(git ls-remote --get-url origin) =~ github.com.*[\/|\:](.*[\/|\:].*).git ]] && echo "${BASH_REMATCH[1]}")
+fetch-repo-name() {
+  echo "$([[ $(git ls-remote --get-url origin) =~ github.com.*[\/|\:](.*[\/|\:].*).git ]] && echo "${BASH_REMATCH[1]}")"
 }
 
 fetch-github-registration-token() {
