@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir=$(cd "$(dirname "$0")" ; pwd -P)
+base_profile="${1}"
+role_name="${2}"
+
+target_profile=data-derp
+
+usage() { echo "Usage: $0 [-p <base profile: string>] [-m <target role: string>]" 1>&2; exit 1; }
+
+while getopts ":b:t:" o; do
+    case "${o}" in
+        b)
+            base=${OPTARG}
+            ;;
+        t)
+            target=${OPTARG}
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+if [ -z "${base}" ] || [ -z "${target}" ] ; then
+    usage
+fi
+
+identity=$(AWS_PROFILE=${base} aws sts get-caller-identity)
+account=$(echo $identity | jq -r '.Account')
+arn=$(echo $identity | jq -r '.Arn')
+
+response=$(AWS_PROFILE=${base} aws sts assume-role \
+--role-arn "arn:aws:iam::${account}:role/${target}" \
+--role-session-name "bootstrap-$(echo $arn | cut -d '/' -f 3)")
+
+aws configure set aws_access_key_id $(echo $response | jq -r '.Credentials.AccessKeyId') --profile "${target_profile}"
+aws configure set aws_secret_access_key $(echo $response | jq -r '.Credentials.SecretAccessKey') --profile "${target_profile}"
+aws configure set aws_session_token $(echo $response | jq -r '.Credentials.SessionToken') --profile "${target_profile}"
+
+echo "Successfully switched role to arn:aws:iam::${account}:role/${target}. Credentials saved in profile: ${target_profile}."

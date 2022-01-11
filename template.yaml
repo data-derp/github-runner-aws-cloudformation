@@ -1,0 +1,981 @@
+Description:  Deploys a VPC, with a public and private subnet in on AZ,
+  along with an IG, NAT, Route Tables, VPCEndpoints
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name of the project these resources belongs to
+    Default: data-derp
+  ModuleName:
+    Type: String
+    Description: Name of the module these resources belongs to
+    Default: base
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.11.0.0/16
+  PublicSubnetCIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.11.1.0/24
+  PrivateSubnetCIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.11.9.0/24
+  GithubRepoUrl:
+    Type: String
+    Description: The Url of the Github repo (https://github.com/user/repo)
+  InstanceType:
+    Type: String
+    Default: "t3.small"
+    Description: Instance Type of the Github Runner EC2 Instance
+  VolumeSize:
+    Type: String
+    Default: "8"
+    Description: Volume Size of the Github Runner EBS Volume
+  LatestAmiId:
+    Description: Region specific image from the Parameter Store
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+#  HistoryServerPort:
+#    Type: Number
+#    Description: History Server Port for the Spark UI. You can use the default value.
+#    Default: 18080
+#    MinValue: 1150
+#    MaxValue: 65535
+#  SparkPackageLocation:
+#    Type: String
+#    Description: You can use the default value.
+#    Default: 'https://archive.apache.org/dist/spark/spark-2.4.3/spark-2.4.3-bin-without-hadoop.tgz'
+#  SparkUiInstanceType:
+#    Type: String
+#    Default: "t3.medium"
+#    Description: Instance Type of the Spark UI
+
+#Mappings:
+#  MemoryBasedOnInstanceType:
+#    t3.micro:
+#      SparkDaemonMemory: '512m'
+#    t3.small:
+#      SparkDaemonMemory: '1g'
+#    t3.medium:
+#      SparkDaemonMemory: '3g'
+#    t3.large:
+#      SparkDaemonMemory: '6g'
+#    t3.xlarge:
+#      SparkDaemonMemory: '12g'
+#    t3.2xlarge:
+#      SparkDaemonMemory: '28g'
+#    m5.large:
+#      SparkDaemonMemory: '6g'
+#    m5.xlarge:
+#      SparkDaemonMemory: '12g'
+#    m5.2xlarge:
+#      SparkDaemonMemory: '28g'
+#    m5.4xlarge:
+#      SparkDaemonMemory: '28g'
+#    m5.8xlarge:
+#      SparkDaemonMemory: '28g'
+#    m5.12xlarge:
+#      SparkDaemonMemory: '28g'
+#    m5.16xlarge:
+#      SparkDaemonMemory: '28g'
+#    m5.24xlarge:
+#      SparkDaemonMemory: '28g'
+#    r5.large:
+#      SparkDaemonMemory: '12g'
+#    r5.xlarge:
+#      SparkDaemonMemory: '28g'
+#    r5.2xlarge:
+#      SparkDaemonMemory: '28g'
+#    r5.4xlarge:
+#      SparkDaemonMemory: '28g'
+#    r5.8xlarge:
+#      SparkDaemonMemory: '28g'
+#    r5.12xlarge:
+#      SparkDaemonMemory: '28g'
+#    r5.16xlarge:
+#      SparkDaemonMemory: '28g'
+#    r5.24xlarge:
+#      SparkDaemonMemory: '28g'
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${ModuleName}-githubrunner"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${ModuleName}-githubrunner"
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnetCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName} ${ModuleName} GithubRunner Public Subnet"
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: !Ref PrivateSubnetCIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName} ${ModuleName} GithubRunner Private Subnet"
+
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName} ${ModuleName} GithubRunner Public Routes"
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName} ${ModuleName} GithubRunner Private Routes"
+
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet
+
+  NoIngressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}${ModuleName}NoIngress"
+      GroupDescription: "Security group with no ingress rules"
+      VpcId: !Ref VPC
+
+  S3VPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      ServiceName:
+        'Fn::Sub': 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref VPC
+
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}${ModuleName}VpcEndpoints"
+      GroupDescription: "Security group for VPC Endpoints"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref PrivateSubnetCIDR
+
+  CloudwatchVPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName:
+        'Fn::Sub': 'com.amazonaws.${AWS::Region}.monitoring'
+      VpcId: !Ref VPC
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet
+
+  LogsVPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName:
+        'Fn::Sub': 'com.amazonaws.${AWS::Region}.logs'
+      VpcId: !Ref VPC
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet
+
+  SSMVPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName:
+        'Fn::Sub': 'com.amazonaws.${AWS::Region}.ssm'
+      VpcId: !Ref VPC
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet
+
+  SSMMessagesVPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName:
+        'Fn::Sub': 'com.amazonaws.${AWS::Region}.ssmmessages'
+      VpcId: !Ref VPC
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet
+
+  CloudTrailVPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName:
+        'Fn::Sub': 'com.amazonaws.${AWS::Region}.cloudtrail'
+      VpcId: !Ref VPC
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet
+
+  EC2VPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName:
+        'Fn::Sub': 'com.amazonaws.${AWS::Region}.ec2'
+      VpcId: !Ref VPC
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet
+
+  EC2MessagesVPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      ServiceName:
+        'Fn::Sub': 'com.amazonaws.${AWS::Region}.ec2messages'
+      VpcId: !Ref VPC
+      VpcEndpointType: "Interface"
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet
+
+
+  VPCFlowLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+      AssumeRolePolicyDocument:
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "vpc-flow-logs.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      Policies:
+        - PolicyName: write-to-vpc-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "logs:DescribeLogGroups"
+                  - "logs:DescribeLogStreams"
+                Resource:
+                  - "*"
+
+  VPCFlowLogs:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt VPCFlowLogsRole.Arn
+      LogGroupName: VPCFlowLogs
+      LogFormat: '${version} ${vpc-id} ${subnet-id} ${instance-id} ${interface-id} ${account-id} ${type} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${pkt-srcaddr} ${pkt-dstaddr} ${protocol} ${bytes} ${packets} ${start} ${end} ${action} ${tcp-flags} ${log-status}'
+      ResourceId: !Ref VPC
+      ResourceType: VPC
+      TrafficType: ALL
+      Tags:
+        - Key: Name
+          Value: !Ref ProjectName
+
+  AutoscalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: '1'
+      MaxSize: '1'
+      DesiredCapacity: '1'
+      HealthCheckGracePeriod: 300
+      HealthCheckType: "EC2"
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      VPCZoneIdentifier: [ !Ref PrivateSubnet ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${ModuleName}"
+          PropagateAtLaunch: true
+        - Key: Project
+          Value: !Ref ProjectName
+          PropagateAtLaunch: true
+        - Key: Module
+          Value: !Ref ModuleName
+          PropagateAtLaunch: true
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: true
+      AutoScalingRollingUpdate:
+        WaitOnResourceSignals: true
+  LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !Ref LatestAmiId
+      SecurityGroups:
+        - !Ref RunnerSecurityGroup
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: "gp2"
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        Fn::Base64:
+          !Sub |
+          #!/bin/bash
+          set -ex
+
+          sudo yum install -y git
+
+          sudo yum install -y perl-Switch perl-DateTime perl-Sys-Syslog perl-LWP-Protocol-https perl-Digest-SHA.x86_64
+          curl -o ~/CloudWatchMonitoringScripts-1.2.2.zip https://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.2.zip
+          unzip ~/CloudWatchMonitoringScripts-1.2.2.zip -d ~ && rm -f ~/CloudWatchMonitoringScripts-1.2.2.zip
+          (crontab -l || true; echo "*/2 * * * * ~/aws-scripts-mon/mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --mem-used --mem-avail --disk-space-used --disk-space-avail --disk-space-util --disk-path=/ --from-cron") | crontab -
+
+          sudo amazon-linux-extras enable docker
+          sudo yum install -y docker jq
+          sudo service docker start
+
+          mkdir actions-runner && cd actions-runner
+          curl -o actions-runner-linux-x64-2.277.1.tar.gz -L https://github.com/actions/runner/releases/download/v2.277.1/actions-runner-linux-x64-2.277.1.tar.gz
+          tar xzf ./actions-runner-linux-x64-2.277.1.tar.gz
+
+          get-token() {
+              key="/${ProjectName}/${ModuleName}/github-runner-reg-token"
+              aws ssm get-parameters --name ${!key} --region eu-central-1 --with-decryption | jq -r .Parameters[0].Value
+          }
+
+          set +x
+          token=$(get-token)
+
+          if [ "${!token}" == "null" ]; then
+              echo "Registration Token not available in Parameter Store. Exiting"
+              exit 1
+          fi
+
+          RUNNER_ALLOW_RUNASROOT=1 ./config.sh --url ${GithubRepoUrl} --token "${!token}" --unattended
+          RUNNER_ALLOW_RUNASROOT=1 ./run.sh
+          set -x
+
+
+  RunnerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}${ModuleName}GithubRunner"
+      GroupDescription: !Sub "${ProjectName} ${ModuleName} Security group Github Runner"
+      VpcId: !Ref VPC
+
+  EgressToVPCEndpoints:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      GroupId: !Ref RunnerSecurityGroup
+      DestinationSecurityGroupId: !GetAtt VPCEndpointSecurityGroup.GroupId
+
+  Egress80:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      GroupId: !Ref RunnerSecurityGroup
+      CidrIp: "0.0.0.0/0"
+
+  Egress443:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      GroupId: !Ref RunnerSecurityGroup
+      CidrIp: "0.0.0.0/0"
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${ModuleName}-github-runner"
+      Tags:
+        - Key: Module
+          Value: !Ref ModuleName
+        - Key: Project
+          Value: !Ref ProjectName
+      AssumeRolePolicyDocument:
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-${ModuleName}-get-parameter"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ssm:GetParameters"
+                Resource:
+                  - !Sub "arn:aws:ssm:eu-central-1:${AWS::AccountId}:parameter/${ProjectName}/${ModuleName}/github-runner-reg-token"
+              - Effect: Allow
+                Action:
+                  - "kms:Decrypt"
+                  - "kms:GenerateDataKey"
+                Resource:
+                  - !Sub "arn:aws:kms:eu-central-1:${AWS::AccountId}:key/alias/aws/ssm"
+        - PolicyName: !Sub "${ProjectName}-${ModuleName}-put-cloudwatch-metrics"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "cloudwatch:PutMetricData"
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:ListMetrics"
+                Resource:
+                  - "*"
+              - Effect: Allow
+                Action:
+                  - "ec2:DescribeTags"
+                Resource:
+                  - "*"
+                Condition:
+                  StringEquals:
+                    ec2:ResourceTag/Name: !Sub "${ProjectName}-${ModuleName}"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+  Boundary:
+    Type: AWS::IAM::ManagedPolicy
+    #    DeletionPolicy: Retain
+    Properties:
+      ManagedPolicyName: !Sub "${ProjectName}-${ModuleName}-delegated-boundary"
+      Path: !Sub "/${ProjectName}-${ModuleName}/"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            NotAction:
+              - "iam:*"
+              - "organizations:*"
+              - "account:*"
+              - "billing:*"
+            Resource:
+              - "*"
+          - Effect: Allow
+            Action:
+              - "iam:PassRole"
+            Resource:
+              - "*"
+            Condition:
+              ForAnyValue:StringLike:
+                iam:PassedToService: "ecs-tasks.amazonaws.com"
+  Role:
+    Type: AWS::IAM::Role
+    #    DeletionPolicy: Retain
+    Properties:
+      RoleName: !Sub "${ProjectName}-${ModuleName}-github-runner-aws"
+      Tags:
+        - Key: Module
+          Value: !Ref ModuleName
+        - Key: Project
+          Value: !Ref ProjectName
+      AssumeRolePolicyDocument:
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": !GetAtt InstanceRole.Arn
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/PowerUserAccess"
+      Policies:
+        - PolicyName: !Sub "${ProjectName}${ModuleName}DenyInPath"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Deny
+                Action:
+                  - "*"
+                Resource:
+                  - !Sub "arn:aws:iam::*:group/${ProjectName}-${ModuleName}/*"
+                  - !Sub "arn:aws:iam::*:instance-profile/${ProjectName}-${ModuleName}/*"
+                  - !Sub "arn:aws:iam::*:policy/${ProjectName}-${ModuleName}/*"
+                  - !Sub "arn:aws:iam::*:role/${ProjectName}-${ModuleName}/*"
+                  - !Sub "arn:aws:iam::*:user/${ProjectName}-${ModuleName}/*"
+        - PolicyName: !Sub "${ProjectName}${ModuleName}AllowManagingRolesWithBoundary"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "iam:AttachRolePolicy"
+                  - "iam:CreateRole"
+                  - "iam:DeleteRolePolicy"
+                  - "iam:DetachRolePolicy"
+                  - "iam:PutRolePermissionsBoundary"
+                  - "iam:DeleteRolePermissionsBoundary"
+                  - "iam:PutRolePolicy"
+                Resource:
+                  - "*"
+                Condition:
+                  ForAnyValue:StringEquals:
+                    iam:PermissionsBoundary: !Ref Boundary
+              - Effect: Allow
+                Action:
+                  - "iam:AttachUserPolicy"
+                  - "iam:CreateUser"
+                  - "iam:DetachUserPolicy"
+                  - "iam:PutUserPermissionsBoundary"
+                  - "iam:PutUserPolicy"
+                Resource:
+                  - "*"
+                Condition:
+                  ForAnyValue:StringEquals:
+                    iam:PermissionsBoundary: !Ref Boundary
+              - Effect: Allow
+                Action:
+                  - "iam:DeleteRole"
+                  - "iam:GetRole"
+                  - "iam:GetRolePolicy"
+                  - "iam:ListAttachedRolePolicies"
+                  - "iam:ListInstanceProfilesForRole"
+                  - "iam:ListRolePolicies"
+                  - "iam:ListRoleTags"
+                  - "iam:ListRoles"
+                  - "iam:PassRole"
+                  - "iam:TagRole"
+                  - "iam:UntagRole"
+                  - "iam:UpdateAssumeRolePolicy"
+                  - "iam:UpdateRole"
+                  - "iam:UpdateRoleDescription"
+                Resource:
+                  - "*"
+              - Effect: Allow
+                Action:
+                  - "iam:AddUserToGroup"
+                  - "iam:CreateAccessKey"
+                  - "iam:DeleteAccessKey"
+                  - "iam:DeleteUser"
+                  - "iam:GetUser"
+                  - "iam:GetUserPolicy"
+                  - "iam:ListAccessKeys"
+                  - "iam:ListAttachedUserPolicies"
+                  - "iam:ListGroupsForUser"
+                  - "iam:ListUsers"
+                  - "iam:ListUserPolicies"
+                  - "iam:TagUser"
+                  - "iam:UntagUser"
+                Resource:
+                  - "*"
+              - Effect: Allow
+                Action:
+                  - "iam:CreatePolicy"
+                  - "iam:CreatePolicyVersion"
+                  - "iam:DeletePolicy"
+                  - "iam:DeletePolicyVersion"
+                  - "iam:GetPolicy"
+                  - "iam:GetPolicyVersion"
+                  - "iam:ListEntitiesForPolicy"
+                  - "iam:ListPolicies"
+                  - "iam:ListPolicyVersions"
+                  - "iam:SetDefaultPolicyVersion"
+                Resource:
+                  - "*"
+              - Effect: Allow
+                Action:
+                  - "iam:AddRoleToInstanceProfile"
+                  - "iam:CreateInstanceProfile"
+                  - "iam:DeleteInstanceProfile"
+                  - "iam:GetInstanceProfile"
+                  - "iam:ListInstanceProfiles"
+                  - "iam:RemoveRoleFromInstanceProfile"
+                  - "iam:GetServiceLinkedRoleDeletionStatus"
+                Resource:
+                  - "*"
+#  Bucket:
+#    Type: AWS::S3::Bucket
+#    Properties:
+#      AccessControl: "Private"
+#      BucketEncryption:
+#        ServerSideEncryptionConfiguration:
+#          - ServerSideEncryptionByDefault:
+#              SSEAlgorithm: "aws:kms"
+#      BucketName: !Sub "${ProjectName}-${ModuleName}-terraform-state"
+#      Tags:
+#        - Key: Project
+#          Value: !Ref ProjectName
+#        - Key: Module
+#          Value: !Ref ModuleName
+#      VersioningConfiguration:
+#        Status: "Enabled"
+#      PublicAccessBlockConfiguration:
+#        BlockPublicPolicy: true
+#        BlockPublicAcls: true
+#        IgnorePublicAcls: true
+#        RestrictPublicBuckets: true
+#  Table:
+#    Type: AWS::DynamoDB::Table
+#    Properties:
+#      ProvisionedThroughput:
+#        ReadCapacityUnits: 5
+#        WriteCapacityUnits: 5
+#      AttributeDefinitions:
+#        - AttributeName: "LockID"
+#          AttributeType: "S"
+#      KeySchema:
+#        - AttributeName: "LockID"
+#          KeyType: "HASH"
+#      TableName: !Sub "${ProjectName}-${ModuleName}-terraform-lock"
+#      Tags:
+#        - Key: Project
+#          Value: !Ref ProjectName
+#        - Key: Module
+#          Value: !Ref ModuleName
+#  DataSourceBucket:
+#    Type: AWS::S3::Bucket
+#    Properties:
+#      AccessControl: "Private"
+#      BucketEncryption:
+#        ServerSideEncryptionConfiguration:
+#          - ServerSideEncryptionByDefault:
+#              SSEAlgorithm: "aws:kms"
+#      BucketName: !Sub "${ProjectName}-${ModuleName}-data-source"
+#      Tags:
+#        - Key: Project
+#          Value: !Ref ProjectName
+#      VersioningConfiguration:
+#        Status: "Enabled"
+#      PublicAccessBlockConfiguration:
+#        BlockPublicPolicy: true
+#        BlockPublicAcls: true
+#        IgnorePublicAcls: true
+#        RestrictPublicBuckets: true
+#  SparkUiHistoryServerInstance:
+#    Type: AWS::EC2::Instance
+#    Properties:
+#      ImageId: !Ref LatestAmiId
+#      InstanceType: !Ref SparkUiInstanceType
+#      SubnetId: !Ref PrivateSubnet
+#      SecurityGroupIds:
+#        - !Ref SparkUiInstanceSecurityGroup
+#      IamInstanceProfile: !Ref SparkUiHistoryServerInstanceProfile
+#      Tags:
+#        - Key: Name
+#          Value: !Sub "${ProjectName}-${ModuleName}-spark-ui"
+#        - Key: Project
+#          Value: !Ref ProjectName
+#        - Key: Module
+#          Value: !Ref ModuleName
+#        - Key: SubModule
+#          Value: "spark-ui"
+#      UserData:
+#        'Fn::Base64': !Sub |
+#          #!/bin/bash -xe
+#          yum update -y aws-cfn-bootstrap
+#          echo "CA_OVERRIDE=/etc/pki/tls/certs/ca-bundle.crt" >> /etc/environment
+#          export CA_OVERRIDE=/etc/pki/tls/certs/ca-bundle.crt
+#          rpm -Uvh https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm
+#          /opt/aws/bin/cfn-init -v -s ${AWS::StackName} -r SparkUiHistoryServerInstance --region ${AWS::Region}
+#          /opt/aws/bin/cfn-signal -e -s ${AWS::StackName} -r SparkUiHistoryServerInstance --region ${AWS::Region}
+#    Metadata:
+#      AWS::CloudFormation::Init:
+#        configSets:
+#          default:
+#            - cloudwatch_agent_configure
+#            - cloudwatch_agent_restart
+#            - spark_download
+#            - spark_init
+#            - spark_configure
+#            - spark_hs_start
+#            - spark_hs_test
+#        cloudwatch_agent_configure:
+#          files:
+#            /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json:
+#              content: !Sub |
+#                {
+#                  "logs": {
+#                    "logs_collected": {
+#                      "files": {
+#                        "collect_list": [
+#                          {
+#                            "file_path": "/var/log/cfn-init.log",
+#                            "log_group_name": "/aws-glue/sparkui_cfn/cfn-init.log"
+#                          },
+#                          {
+#                            "file_path": "/opt/spark/logs/spark-*",
+#                            "log_group_name": "/aws-glue/sparkui_cfn/spark_history_server.log"
+#                          }
+#                        ]
+#                      }
+#                    }
+#                  }
+#                }
+#        cloudwatch_agent_restart:
+#          commands:
+#            01_stop_service:
+#              command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a stop
+#            02_start_service:
+#              command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+#        spark_download:
+#          packages:
+#            yum:
+#              java-1.8.0-openjdk: [ ]
+#              maven: [ ]
+#              python3: [ ]
+#              python3-pip: [ ]
+#          sources:
+#            /opt: !Ref SparkPackageLocation
+#          commands:
+#            create-symlink:
+#              command: ln -s /opt/spark-* /opt/spark
+#            export:
+#              command: !Sub |
+#                echo "export JAVA_HOME=/usr/lib/jvm/jre" | sudo tee -a /etc/profile.d/jdk.sh
+#                echo "export SPARK_HOME=/opt/spark" | sudo tee -a /etc/profile.d/spark.sh
+#                export JAVA_HOME=/usr/lib/jvm/jre
+#                export SPARK_HOME=/opt/spark
+#            download-pom-xml:
+#              command: curl -o /tmp/pom.xml https://aws-glue-sparkui-prod-eu-central-1.s3-eu-central-1.amazonaws.com/public/mvn/pom.xml
+#            download-setup-py:
+#              command: curl -o /tmp/setup.py https://aws-glue-sparkui-prod-eu-central-1.s3-eu-central-1.amazonaws.com/public/misc/setup.py
+#            download-systemd-file:
+#              command: curl -o /usr/lib/systemd/system/spark-history-server.service https://aws-glue-sparkui-prod-eu-central-1.s3-eu-central-1.amazonaws.com/public/misc/spark-history-server.service
+#        spark_init:
+#          commands:
+#            download-mvn-dependencies:
+#              command: cd /tmp; mvn dependency:copy-dependencies -DoutputDirectory=/opt/spark/jars/
+#            install-boto:
+#              command: pip3 install boto --user; pip3 install boto3 --user
+#          files:
+#            /opt/spark/conf/spark-defaults.conf:
+#              content: !Sub |
+#                spark.eventLog.enabled                      true
+#                spark.history.fs.logDirectory               s3a://${ProjectName}-${ModuleName}-spark-logs/
+#                spark.history.ui.port                       ${HistoryServerPort}
+#                spark.ssl.historyServer.enabled             false
+#              group: ec2-user
+#              mode: '000644'
+#              owner: ec2-user
+#            /opt/spark/conf/spark-env.sh:
+#              content: !Sub
+#                - |
+#                  export SPARK_DAEMON_MEMORY=${SparkDaemonMemoryConfig}
+#                  export SPARK_HISTORY_OPTS="$SPARK_HISTORY_OPTS -Dspark.hadoop.fs.s3.impl=org.apache.hadoop.fs.s3a.S3AFileSystem"
+#                - SparkDaemonMemoryConfig: !FindInMap [ MemoryBasedOnInstanceType, !Ref SparkUiInstanceType, SparkDaemonMemory ]
+#              group: ec2-user
+#              mode: '000644'
+#              owner: ec2-user
+#        spark_configure:
+#          commands:
+#            create-symlink:
+#              command: ln -s /usr/lib/systemd/system/spark-history-server.service /etc/systemd/system/multi-user.target.wants/
+#            enable-spark-hs:
+#              command: systemctl enable spark-history-server
+##            configure-keystore:
+##              command: !Sub |
+##                python3 /tmp/setup.py --keystore "${KeystorePath}" --keystorepw "${KeystorePassword}" > /tmp/setup_py.log 2>&1
+#        spark_hs_start:
+#          commands:
+#            start_spark_hs_server:
+#              command: systemctl start spark-history-server
+#        spark_hs_test:
+#          commands:
+#            check-spark-hs-server:
+#              command: !Sub |
+#                curl --retry 60 --retry-delay 10 --retry-max-time 600 --retry-connrefused http://localhost:${HistoryServerPort} --insecure;
+#                /opt/aws/bin/cfn-signal -e $? "${SparkUiWaitHandle}"
+#  SparkUiWaitHandle:
+#    Type: AWS::CloudFormation::WaitConditionHandle
+#  SparkUiWaitCondition:
+#    Type: AWS::CloudFormation::WaitCondition
+#    DependsOn: SparkUiHistoryServerInstance
+#    Properties:
+#      Handle: !Ref SparkUiWaitHandle
+#      Timeout: 1200
+#  SparkUiInstanceSecurityGroup:
+#    Type: AWS::EC2::SecurityGroup
+#    Properties:
+#      GroupDescription: Enable HTTPS access
+#      VpcId: !Ref VPC
+#      SecurityGroupIngress:
+#        - IpProtocol: tcp
+#          FromPort: !Ref HistoryServerPort
+#          ToPort: !Ref HistoryServerPort
+#          CidrIp: !Ref PrivateSubnetCIDR
+#      SecurityGroupEgress:
+#        - IpProtocol: tcp
+#          FromPort: 80
+#          ToPort: 80
+#          CidrIp: "0.0.0.0/0"
+#        - IpProtocol: tcp
+#          FromPort: 443
+#          ToPort: 443
+#          CidrIp: "0.0.0.0/0"
+#        - IpProtocol: tcp
+#          FromPort: 443
+#          ToPort: 443
+#          DestinationSecurityGroupId: !GetAtt VPCEndpointSecurityGroup.GroupId
+#
+#  SparkUiHistoryServerRole:
+#    Type: AWS::IAM::Role
+#    Properties:
+#      AssumeRolePolicyDocument:
+#        Version: '2012-10-17'
+#        Statement:
+#          - Effect: Allow
+#            Principal:
+#              Service:
+#                - ec2.amazonaws.com
+#            Action:
+#              - sts:AssumeRole
+#      Path: /
+#      Policies:
+#        - PolicyName: "root"
+#          PolicyDocument:
+#            Version: "2012-10-17"
+#            Statement:
+#              - Effect: "Allow"
+#                Action:
+#                  - kms:Decrypt
+#                  - kms:GenerateDataKey
+#                Resource: "*"
+#      ManagedPolicyArns:
+#        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+#        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+#        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+#  SparkUiHistoryServerInstanceProfile:
+#    Type: "AWS::IAM::InstanceProfile"
+#    Properties:
+#      Path: "/"
+#      Roles:
+#        - !Ref SparkUiHistoryServerRole
+#  SparkLogsBucket:
+#    Type: AWS::S3::Bucket
+#    Properties:
+#      AccessControl: "Private"
+#      BucketEncryption:
+#        ServerSideEncryptionConfiguration:
+#          - ServerSideEncryptionByDefault:
+#              SSEAlgorithm: "aws:kms"
+#      BucketName: !Sub "${ProjectName}-${ModuleName}-spark-logs"
+#      Tags:
+#        - Key: Project
+#          Value: !Ref ProjectName
+#        - Key: Module
+#          Value: !Ref ModuleName
+#      VersioningConfiguration:
+#        Status: "Enabled"
+#      PublicAccessBlockConfiguration:
+#        BlockPublicPolicy: true
+#        BlockPublicAcls: true
+#        IgnorePublicAcls: true
+#        RestrictPublicBuckets: true
