@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir=$(cd "$(dirname "$0")" ; pwd -P)
+
+aws_profile=data-derp
+
+delete-ssm-parameter() {
+    project_name="${1}"
+    module_name="${2}"
+    aws_region="${3}"
+    for i in project_name module_name aws_region; do
+      if [ -z "!{i}" ]; then
+        echo "${i} not set. Usage <func: create-update-ssm-parameter> PROJECT_NAME MODULE_NAME AWS_REGION"
+        exit 1
+      fi
+    done
+
+    parameter="/${project_name}/${module_name}/github-runner-reg-token"
+    if [[ $(AWS_PROFILE=${aws_profile} aws ssm get-parameter --name "${parameter}" --region "${aws_region}") ]]; then
+      echo "Parameter (${parameter}) exists. Deleting..."
+      AWS_PROFILE=${aws_profile} aws ssm delete-parameter \
+        --name "${parameter}" \
+        --region "${aws_region}"
+    else
+      echo "Parameter (${parameter}) exists. Nothing to do here!"
+    fi
+}
+
+delete-stack() {
+  project_name="${1}"
+  module_name="${2}"
+  aws_region="${3}"
+
+  pushd "${script_dir}" > /dev/null
+    stack_name="${project_name}-${module_name}-github-runner-stack"
+    if [[ $(AWS_PROFILE="${aws_profile}"  aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}") ]]; then
+      echo "Stack (${stack_name}) exists. Deleting..."
+      AWS_PROFILE="${aws_profile}" aws cloudformation delete-stack --stack-name "${stack_name}" \
+        --stack-name "${stack_name}" \
+        --region "${aws_region}"
+    else
+      echo "Stack (${stack_name}) does not exist. Nothing to do here!"
+    fi
+
+    until $(AWS_PROFILE="${aws_profile}" aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}" 2>&1 | grep -q "${stack_name} does not exist")
+    do
+      echo "Deleting..."
+      sleep 10
+    done
+
+  popd > /dev/null
+
+}
+
+usage() { echo "Usage: $0 [-p <project name: string>] [-m <module name: string>] [-r <aws region: string>]" 1>&2; exit 1; }
+
+while getopts ":p:m:r:" o; do
+    case "${o}" in
+        p)
+            project=${OPTARG}
+            ;;
+        m)
+            module=${OPTARG}
+            ;;
+        r)
+            region=${OPTARG}
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+if [ -z "${project}" ] || [ -z "${module}" ] || [ -z "${region}" ]; then
+    usage
+fi
+delete-ssm-parameter "${project}" "${module}" "${region}"
+delete-stack "${project}" "${module}" "${region}"

@@ -15,11 +15,11 @@ This Cloudformation template sets up the following:
 3. Set up your AWS CLI and authenticate to your AWS account and store those credentials in a profile called `data-derp` NOTE: to reduce clashing with other AWS credentials, the bootstrap script uses an AWS_PROFILE called `data-derp`.
 4. **OPTIONAL:** Switch your role.  For those expected to assume a role (within the same account), there is a helper function:
 ```bash
-./switch-role -b <starting-role> -t <target-role>
+./github-runner-aws-cloudformation/switch-role -b <starting-role> -t <target-role>
 ```
 5. Create the Stack. 
 ```bash
-./create-stack -p your-project-name -m your-team-name -u your-github-username
+./github-runner-aws-cloudformation/create-stack -p <your-project-name> -m <your-team-name> -r <aws-region> -u <your-github-username>
 ```
 :bulb: the `your-project-name` and `your-team-name` must be globally unique as an AWS S3 bucket is created (this resource is globally unique)
 
@@ -30,6 +30,10 @@ Enter host password for user 'your-github-username': <the-personal-access-token>
 
 7. View your [Cloudformation Stacks in the AWS Console](https://eu-central-1.console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks)
 
-
+8. When you're done, self-destruct your Github Runner:
+```bash
+./github-runner-aws-cloudformation/delete-stack -p <your-project-name> -m <your-team-name> -r <aws-region>
+```
 ## Future Development
 - [ ] Delete Stack (and SSM Param) script
+- [ ] Handle different AWS regions
