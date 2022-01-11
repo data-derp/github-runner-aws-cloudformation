@@ -44,11 +44,11 @@ delete-stack() {
       echo "Stack (${stack_name}) does not exist. Nothing to do here!"
     fi
 
-    until $(AWS_PROFILE="${aws_profile}" aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}" 2>&1 | grep -q "${stack_name} does not exist")
-    do
-      echo "Deleting..."
-      sleep 10
-    done
+#    until $(AWS_PROFILE="${aws_profile}" aws cloudformation describe-stacks --stack-name "${stack_name}" --region "${aws_region}" 2>&1 | grep -q "${stack_name} does not exist")
+#    do
+#      echo "Deleting..."
+#      sleep 10
+#    done
 
   popd > /dev/null
 
