@@ -2,6 +2,10 @@
 
 script_dir=$(cd "$(dirname "$0")" ; pwd -P)
 
+get_repo_name() {
+  $([[ $(git ls-remote --get-url origin) =~ github.com.*[\/|\:](.*[\/|\:].*).git ]] && echo "${BASH_REMATCH[1]}")
+}
+
 fetch-github-registration-token() {
   github_username="${1}"
 
@@ -10,7 +14,7 @@ fetch-github-registration-token() {
     exit 1
   fi
 
-  repo_name=$([[ $(git ls-remote --get-url origin) =~ github.com.*[\/|\:](.*[\/|\:].*).git ]] && echo "${BASH_REMATCH[1]}")
+  repo_name=get_repo_name
   response=$(curl \
     -u $github_username \
     -X POST \
@@ -19,3 +23,4 @@ fetch-github-registration-token() {
 
   echo $response | jq -r .token
 }
+
