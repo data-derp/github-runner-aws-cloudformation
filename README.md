@@ -35,5 +35,5 @@ Enter host password for user 'your-github-username': <the-personal-access-token>
 ./github-runner-aws-cloudformation/delete-stack -p <your-project-name> -m <your-team-name> -r <aws-region>
 ```
 ## Future Development
-- [ ] Delete Stack (and SSM Param) script
-- [ ] Handle different AWS regions
+- [x] Delete Stack (and SSM Param) script
+- [x] Handle different AWS regions
