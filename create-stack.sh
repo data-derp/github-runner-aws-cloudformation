@@ -39,7 +39,7 @@ create-update-ssm-parameter() {
     token="${3}"
     for i in project_name module_name token; do
       if [ -z "!{i}" ]; then
-        echo "${i} not set. Usage <func> PROJECT_NAME MODULE_NAME TOKEN"
+        echo "${i} not set. Usage <func: create-update-ssm-parameter> PROJECT_NAME MODULE_NAME TOKEN"
         exit 1
       fi
     done
