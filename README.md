@@ -22,22 +22,22 @@ This Cloudformation template sets up the following:
    export AWS_PROFILE=data-derp
    ```
 5. Create the Stack. 
-```bash
-./github-runner-aws-cloudformation/create-stack -p <your-project-name> -m <your-team-name> -r <aws-region> -u <your-github-username>
-```
-:bulb: the `your-project-name` and `your-team-name` must be globally unique as an AWS S3 bucket is created (this resource is globally unique)
+   ```bash
+   ./github-runner-aws-cloudformation/create-stack -p <your-project-name> -m <your-team-name> -r <aws-region> -u <your-github-username>
+   ```
+   :bulb: the `your-project-name` and `your-team-name` must be globally unique as an AWS S3 bucket is created (this resource is globally unique)
 
 6. When prompted, enter your Personal Access Token (created in step 1)
-```bash
-Enter host password for user 'your-github-username': <the-personal-access-token>
-```
+   ```bash
+   Enter host password for user 'your-github-username': <the-personal-access-token>
+   ```
 
 7. View your [Cloudformation Stacks in the AWS Console](https://eu-central-1.console.aws.amazon.com/cloudformation/home?region=eu-central-1#/stacks)
 
 8. When you're done, self-destruct your Github Runner:
-```bash
-./github-runner-aws-cloudformation/delete-stack -p <your-project-name> -m <your-team-name> -r <aws-region>
-```
+   ```bash
+   ./github-runner-aws-cloudformation/delete-stack -p <your-project-name> -m <your-team-name> -r <aws-region>
+   ```
 ## Future Development
 - [x] Delete Stack (and SSM Param) script
 - [x] Handle different AWS regions
