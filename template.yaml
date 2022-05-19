@@ -370,7 +370,7 @@ Resources:
 
           get-token() {
               key="/${ProjectName}/${ModuleName}/github-runner-reg-token"
-              aws ssm get-parameters --name ${!key} --region eu-central-1 --with-decryption | jq -r .Parameters[0].Value
+              aws ssm get-parameters --name ${!key} --region ${AWS::Region} --with-decryption | jq -r .Parameters[0].Value
           }
 
           set +x
@@ -453,13 +453,13 @@ Resources:
                 Action:
                   - "ssm:GetParameters"
                 Resource:
-                  - !Sub "arn:aws:ssm:eu-central-1:${AWS::AccountId}:parameter/${ProjectName}/${ModuleName}/github-runner-reg-token"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${ProjectName}/${ModuleName}/github-runner-reg-token"
               - Effect: Allow
                 Action:
                   - "kms:Decrypt"
                   - "kms:GenerateDataKey"
                 Resource:
-                  - !Sub "arn:aws:kms:eu-central-1:${AWS::AccountId}:key/alias/aws/ssm"
+                  - !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/alias/aws/ssm"
         - PolicyName: !Sub "${ProjectName}-${ModuleName}-put-cloudwatch-metrics"
           PolicyDocument:
             Version: 2012-10-17
