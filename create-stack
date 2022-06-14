@@ -23,11 +23,13 @@ create-update() {
     done
 
 
-    token=$(fetch-github-registration-token ${github_username} ${repo_name})
-    if [ "${token}" == null ]; then
-      echo "Token is NULL. Are you sure you entered your Personal Access Token correctly?"
-      exit 1
-    fi
+    response=$(fetch-github-registration-token ${github_username} ${repo_name})
+     token=$(echo $response | jq -r .token)
+     if [ "${token}" == null ]; then
+       echo "Token is NULL. Are you sure you entered your Personal Access Token correctly?"
+       echo $response
+       exit 1
+     fi
     create-update-ssm-parameter "${project_name}" "${module_name}" "${aws_region}" "${token}"
     create-update-stack "${project_name}" "${module_name}" "${aws_region}"
   popd > /dev/null

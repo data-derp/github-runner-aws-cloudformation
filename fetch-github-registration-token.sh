@@ -23,6 +23,6 @@ fetch-github-registration-token() {
     -H "Accept: application/vnd.github.v3+json" \
     https://api.github.com/repos/${github_repo_name}/actions/runners/registration-token)
 
-  echo $response | jq -r .token
+  echo $response
 }
 
